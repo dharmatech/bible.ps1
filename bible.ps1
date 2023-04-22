@@ -1,23 +1,8 @@
 
-cd C:\Users\dharm\bible_databases
+$data = Get-Content json/t_asv.json | ConvertFrom-Json
 
-$data = Get-Content C:\Users\dharm\bible_databases\json\t_asv.json | ConvertFrom-Json
-
-
-
-$key_english = Get-Content C:\Users\dharm\bible_databases\json\key_english.json | ConvertFrom-Json
-
-
-
-$data.resultset.row | Select-Object -First 10
-
-$data.resultset.row.Count
-
-
-$data.resultset.row[0]
-
-
-
+$key_english = Get-Content json/key_english.json | ConvertFrom-Json
+# ----------------------------------------------------------------------
 class Verse
 {
     $id
@@ -35,12 +20,14 @@ class Verse
         $this.text    = $text    
     }
 }
+# ----------------------------------------------------------------------
 
 $bible = foreach ($row in $data.resultset.row)
 {
     [Verse]::new($row.field[0], $row.field[1], $row.field[2], $row.field[3], $row.field[4])    
 }
-
+# ----------------------------------------------------------------------
+exit
 # ----------------------------------------------------------------------
 $bible | Select-Object -First 10 | ft *
 # ----------------------------------------------------------------------
@@ -91,3 +78,18 @@ $bible | Where-Object text -Match 'hell' | Select-Object id, book, chapter, vers
 $bible | Where-Object text -Match 'abraham' | Select-Object id, book, chapter, verse, $book_field, $testament_field, text | Group-Object otnt | Select-Object Count, Name
 
 $bible | Where-Object text -Match 'abraham' | Select-Object id, book, chapter, verse, $book_field, $testament_field, text | ft *
+# ----------------------------------------------------------------------
+# word frequency table
+# ----------------------------------------------------------------------
+$result = foreach ($word in 'demon sin hell abraham' -split ' ')
+{
+    $groups = $bible | Where-Object text -Match $word | Select-Object id, book, chapter, verse, $book_field, $testament_field, text | Group-Object otnt
+    
+    [PSCustomObject]@{
+        word = $word
+        OT = ($groups | Where-Object Name -EQ OT).Count
+        NT = ($groups | Where-Object Name -EQ NT).Count
+    }
+}
+
+$result | ft *
