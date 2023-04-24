@@ -71,10 +71,25 @@ function generate-index ()
     $index
 }
 
+
+
 if (Test-Path index.xml.zip)
 {
-    Write-Host 'index.xml.zip found. Importing index.' -ForegroundColor Yellow
-    Measure-Command { $index = Import-Clixml .\index.xml } | Select-Object TotalSeconds
+    if ((Test-Path index.xml) -eq $false)
+    {
+        Write-Host 'Expanding archive' -ForegroundColor Yellow
+        Expand-Archive .\index.xml.zip .
+    }
+
+    if (Test-Path .\index.xml)
+    {
+        Write-Host 'index.xml found. Importing index.' -ForegroundColor Yellow
+        Measure-Command { $index = Import-Clixml .\index.xml } | Select-Object TotalSeconds
+    }
+    else
+    {
+        throw 'index.xml not found'
+    }    
 }
 else
 {
@@ -115,6 +130,51 @@ $field_book_name = @{ Label = 'book_name'; Expression = { ($key_english.resultse
 $fields = 'id', 'book', 'chapter', 'verse', $field_book_name, 'text'
 
 $bible | Where-Object text -Match 'hell' | Select-Object id, book, chapter, verse, $field_book_name, text | Select-Object -First 10 | ft *
+
+# ----------------------------------------------------------------------
+# Number of verses that contain 'blood', by book
+# ----------------------------------------------------------------------
+$bible | Where-Object text -Match 'blood' | Select-Object id, book, chapter, verse, $field_book_name, text | Group-Object book_name | Sort-Object Count -Descending
+
+# verses-matching-by-book
+
+function verses-matching-by-book ($text)
+{
+    $bible | Where-Object text -Match $text | Select-Object id, book, chapter, verse, $field_book_name, text | Group-Object book_name | Sort-Object Count -Descending
+}
+
+verses-matching-by-book abraham
+verses-matching-by-book demon
+verses-matching-by-book possessed
+
+
+$bible | Where-Object text -Match 'posses' | Select-Object id, book, chapter, verse, $field_book_name, text | ft *
+
+$bible | ? text -Match 'posses' | ? text -NotMatch 'in possession|possessor of|a possession|his possession' | Select-Object id, book, chapter, verse, $field_book_name, text | Measure-Object
+
+$bible | ? text -Match 'posses' | ? text -NotMatch 'in possession|possessor of|a possession|his possession' | Select-Object $fields | Measure-Object
+
+# ----------------------------------------------------------------------
+# verses that contain 'possess' and 'demon'
+# ----------------------------------------------------------------------
+$bible | ? text -Match 'possess' | ? text -Match 'demon' | Select-Object $fields | ft *
+
+
+# verses-matching-words
+
+function verses-matching-words ($words)
+{
+    $verses = $bible
+
+    foreach ($word in $words)
+    {
+        $verses = $verses | Where-Object text -Match $word
+    }
+
+    $verses
+}
+
+verses-matching-words 'demon', 'possess' | ft $fields
 # ----------------------------------------------------------------------
 # Verses that contain 'hell'
 # ----------------------------------------------------------------------
