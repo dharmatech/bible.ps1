@@ -35,6 +35,59 @@ foreach ($verse in $bible)
     $id_index[$verse.id] = $verse
 }
 # ----------------------------------------------------------------------
+# $index
+# ----------------------------------------------------------------------
+
+function generate-index ()
+{
+    $index = @{}
+
+    $prev = ''
+    
+    foreach ($verse in $bible)
+    {
+        $current = 'book: {0} chapter: {1}' -f $verse.Book, $verse.Chapter
+        if ($prev -ne $current)
+        {
+            $prev = $current
+            Write-Host $current -ForegroundColor Yellow
+        }
+    
+        $words = $verse.text.ToLower() -replace '\.', '' -replace ',', '' -replace ':', '' -replace ';', '' -split ' '
+    
+        foreach ($word in $words)
+        {
+            if ($index[$word] -eq $null)
+            {
+                $index[$word] = @($verse)
+            }
+            else
+            {
+                $index[$word] += $verse
+            }
+        }
+    }
+
+    $index
+}
+
+if (Test-Path index.xml.zip)
+{
+    Write-Host 'index.xml.zip found. Importing index.' -ForegroundColor Yellow
+    Measure-Command { $index = Import-Clixml .\index.xml } | Select-Object TotalSeconds
+}
+else
+{
+    Write-Host 'Generating index' -ForegroundColor Yellow
+    Measure-Command { $index = generate-index } | Select-Object TotalMinutes
+
+    Write-Host 'Serializing index' -ForegroundColor Yellow
+    Measure-Command { $index | Export-Clixml -Depth 1000 index.xml } | Select-Object TotalSeconds
+
+    Write-Host 'Compressing index' -ForegroundColor Yellow
+    Measure-Command { Compress-Archive .\index.xml .\index.xml.zip -Force } | Select-Object TotalSeconds
+}
+# ----------------------------------------------------------------------
 exit
 # ----------------------------------------------------------------------
 $bible | Select-Object -First 10 | ft *
@@ -157,48 +210,7 @@ $bible | Where-Object text -Match 'sacrifice' | ft *
 
 $index['sacrifice'] | ft *
 
-# ----------------------------------------------------------------------
-# $index
-# ----------------------------------------------------------------------
-$a = Get-Date
 
-$index = @{}
-
-$prev = ''
-
-foreach ($verse in $bible)
-{
-    $current = 'book: {0} chapter: {1}' -f $verse.Book, $verse.Chapter
-    if ($prev -ne $current)
-    {
-        $prev = $current
-        Write-Host $current -ForegroundColor Yellow
-    }
-
-    $words = $verse.text.ToLower() -replace '\.', '' -replace ',', '' -replace ':', '' -replace ';', '' -split ' '
-
-    foreach ($word in $words)
-    {
-        if ($index[$word] -eq $null)
-        {
-            $index[$word] = @($verse)
-        }
-        else
-        {
-            $index[$word] += $verse
-        }
-    }
-}
-
-$b = Get-Date
-
-($b - $a).TotalMinutes
-
-Measure-Command { $index | Export-Clixml -Depth 1000 index.xml } | Select-Object TotalSeconds
-
-Measure-Command { Compress-Archive .\index.xml .\index.xml.zip -Force } | Select-Object TotalSeconds
-
-Measure-Command { $imported_index = Import-Clixml .\index.xml } | Select-Object TotalSeconds
 # ----------------------------------------------------------------------
 
 
