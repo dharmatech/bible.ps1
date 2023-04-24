@@ -3,7 +3,7 @@ $data = Get-Content json/t_asv.json | ConvertFrom-Json
 
 $key_english = Get-Content json/key_english.json | ConvertFrom-Json
 # ----------------------------------------------------------------------
-class Verse
+class Verse 
 {
     $id
     $book
@@ -21,21 +21,29 @@ class Verse
     }
 }
 # ----------------------------------------------------------------------
-
 $bible = foreach ($row in $data.resultset.row)
 {
     [Verse]::new($row.field[0], $row.field[1], $row.field[2], $row.field[3], $row.field[4])    
+}
+# ----------------------------------------------------------------------
+# id_index
+# ----------------------------------------------------------------------
+$id_index = @{}
+
+foreach ($verse in $bible)
+{
+    $id_index[$verse.id] = $verse
 }
 # ----------------------------------------------------------------------
 exit
 # ----------------------------------------------------------------------
 $bible | Select-Object -First 10 | ft *
 # ----------------------------------------------------------------------
-# Verses in Genesis
+# Number of verses in Genesis
 # ----------------------------------------------------------------------
 $bible | Where-Object book -EQ 1 | Measure-Object
 # ----------------------------------------------------------------------
-# Chapters in Genesis
+# Number of chapters in Genesis
 # ----------------------------------------------------------------------
 $bible | Where-Object book -EQ 1 | Group-Object chapter | Measure-Object
 # ----------------------------------------------------------------------
@@ -47,9 +55,17 @@ $bible | Where-Object text -Match 'sin' | Measure-Object
 # ----------------------------------------------------------------------
 $bible | Where-Object text -Match 'hell' | Measure-Object
 # ----------------------------------------------------------------------
+# Which verses contain 'hell'
+# ----------------------------------------------------------------------
+$field_book_name = @{ Label = 'book_name'; Expression = { ($key_english.resultset.keys | Where-Object b -eq $_.book).n } }
+
+$fields = 'id', 'book', 'chapter', 'verse', $field_book_name, 'text'
+
+$bible | Where-Object text -Match 'hell' | Select-Object id, book, chapter, verse, $field_book_name, text | Select-Object -First 10 | ft *
+# ----------------------------------------------------------------------
 # Verses that contain 'hell'
 # ----------------------------------------------------------------------
-$bible | Where-Object text -Match 'hell' | ft id, book, chapter, verse, @{ Label = 'book'; Expression = { ($key_english.resultset.keys | Where-Object b -eq $_.book).n } }, text
+$bible | Where-Object text -Match 'hell' | ft id, book, chapter, verse, $field_book_name, text
 # ----------------------------------------------------------------------
 # Verses that contain 'sin'
 # ----------------------------------------------------------------------
@@ -59,7 +75,10 @@ $bible | Where-Object text -Match 'satan' | ft id, book, chapter, verse, @{ Labe
 
 $bible | Where-Object text -Match 'demon' | ft id, book, chapter, verse, @{ Label = 'book'; Expression = { ($key_english.resultset.keys | Where-Object b -eq $_.book).n } }, text
 
+$bible | Where-Object text -Match 'sin' | Select-Object $fields | Group-Object book_name | Sort-Object Count -Descending
 
+
+$bible | Where-Object text -Match 'sacrifice' | Select-Object $fields | Group-Object book_name | Sort-Object Count -Descending
 # ----------------------------------------------------------------------
 $book_field      = @{ Label = 'bookn'; Expression = { ($key_english.resultset.keys | Where-Object b -eq $_.book).n } }
 
@@ -99,7 +118,7 @@ $result | ft *
 
 
 
-$result = foreach ($word in ('god demon sin hell abraham heaven sheol hades' -split ' ') + 'fear not')
+$result = foreach ($word in ('god demon sin hell abraham heaven sheol hades love sacrifice offering' -split ' ') + 'fear not')
 {
     $groups = $bible | Where-Object text -Match $word | Select-Object id, book, chapter, verse, $book_field, $testament_field, text | Group-Object otnt
     
@@ -111,6 +130,35 @@ $result = foreach ($word in ('god demon sin hell abraham heaven sheol hades' -sp
 }
 
 $result | Sort-Object word | ft *
+# ----------------------------------------------------------------------
+# word frequency table : use index
+# ----------------------------------------------------------------------
+
+$result = foreach ($word in ('god demon sin hell abraham heaven sheol hades love sacrifice offering' -split ' ') + 'fear not')
+{
+    # $bible | Where-Object text -Match $word | ft *
+
+    # $groups = $bible | Where-Object text -Match $word | Select-Object id, book, chapter, verse, $book_field, $testament_field, text | Group-Object otnt
+
+    $groups = $index[$word] | Select-Object id, book, chapter, verse, $book_field, $testament_field, text | Group-Object otnt
+    
+    [PSCustomObject]@{
+        word = $word
+        OT = ($groups | Where-Object Name -EQ OT).Count
+        NT = ($groups | Where-Object Name -EQ NT).Count
+    }
+}
+
+$result | Sort-Object word | ft *
+
+
+
+$bible | Where-Object text -Match 'sacrifice' | ft *
+
+$index['sacrifice'] | ft *
+
+# ----------------------------------------------------------------------
+# $index
 # ----------------------------------------------------------------------
 $a = Get-Date
 
@@ -138,13 +186,19 @@ foreach ($verse in $bible)
         else
         {
             $index[$word] += $verse
-        }        
+        }
     }
 }
 
 $b = Get-Date
 
 ($b - $a).TotalMinutes
+
+Measure-Command { $index | Export-Clixml -Depth 1000 index.xml } | Select-Object TotalSeconds
+
+Measure-Command { Compress-Archive .\index.xml .\index.xml.zip -Force } | Select-Object TotalSeconds
+
+Measure-Command { $imported_index = Import-Clixml .\index.xml } | Select-Object TotalSeconds
 # ----------------------------------------------------------------------
 
 
@@ -161,55 +215,53 @@ foreach ($entry in $index.GetEnumerator())
 {
     $key = $entry.Name
   
-    $concise_index."$key" = $entry.Value | ForEach-Object id
+    # $concise_index."$key" = $entry.Value | ForEach-Object id
+
+    $concise_index[$key] = $entry.Value | ForEach-Object id
+
+    # $concise_index.Add($key, ($entry.Value | ForEach-Object id))
 }
+
+$concise_index | Export-Clixml .\concise_index.xml
+
+Compress-Archive .\concise_index.xml .\concise_index.xml.zip -Force
 
 $concise_index | ConvertTo-Json -Depth 100 > concise_index.json
 
-Compress-Archive .\concise_index.json .\concise_index.json.zip
+Compress-Archive .\concise_index.json .\concise_index.json.zip -Force
+
+
+# $tbl = @{ 'abc' = @(1, 2, 3); 'bcd' = @(2, 3, 4) }
+
+# $tbl.GetType()
+
+# $result = $tbl | ConvertTo-Json | ConvertFrom-Json
+
+
+# $tbl | Export-Clixml -Path c:\temp\out.xml
+
+# $imported = Import-Clixml C:\temp\out.xml
+
+
 # ----------------------------------------------------------------------
+Measure-Command { $concise_index = Get-Content .\concise_index.json | ConvertFrom-Json }
 
+$rebuilt_index = @{}
 
-
-# $frequency = 
-
-
-
-$a = Get-Date
-
-$frequency = foreach ($entry in $index.GetEnumerator())
+foreach ($entry in $concise_index.GetEnumerator()) 
 {
-    [PSCustomObject]@{
-        word = $entry.Name
-        count = $entry.Value.Count
-    }
+    $rebuilt_index[$entry.Name] = @(foreach ($id in $entry.Value)
+    {
+        $id_index[$id]
+    })
 }
 
-$b = Get-Date
+# ----------------------------------------------------------------------
 
-($b - $a).TotalMinutes
-
-
-
-$frequency | Sort-Object Count -Descending | Select-Object -First 40 | ft *
-
-$frequency | Where-Object word -NotIn ('the and of to in that a it i is as my me' -split ' ') | Sort-Object Count -Descending | Select-Object -First 40 | ft *
-
-
-$frequency | Where-Object word -NotIn $stop_words | Sort-Object Count -Descending | Select-Object -First 40 | ft *
-
-$frequency | Where-Object word -NotIn $stop_words | Sort-Object Count -Descending > frequency.txt
-
-# $verse = $bible[0]
-
-# $verse = $bible | Select-Object -First 10 | Where-Object text -Match ',' | Select-Object -First 1
-
-# $verse.text
-
-
-
-
-
+Measure-Command { $index = Get-Content .\index.json | ConvertFrom-Json }
+# ----------------------------------------------------------------------
+# stop words
+# ----------------------------------------------------------------------
 $stop_words = @"
 a
 about
@@ -386,3 +438,96 @@ yours
 yourself
 yourselves
 "@ -split "`r`n"
+# ----------------------------------------------------------------------
+# frequency table : how many times a word appears 
+# ----------------------------------------------------------------------
+$a = Get-Date
+
+$frequency = foreach ($entry in $index.GetEnumerator())
+{
+    [PSCustomObject]@{
+        word = $entry.Name
+        count = $entry.Value.Count
+    }
+}
+
+$b = Get-Date
+
+($b - $a).TotalMinutes
+
+
+
+$frequency | Sort-Object Count -Descending | Select-Object -First 40 | ft *
+
+$frequency | Where-Object word -NotIn ('the and of to in that a it i is as my me' -split ' ') | Sort-Object Count -Descending | Select-Object -First 40 | ft *
+
+
+$frequency | Where-Object word -NotIn $stop_words | Sort-Object Count -Descending | Select-Object -First 40 | ft *
+
+$frequency | Where-Object word -NotIn $stop_words | Sort-Object Count -Descending > frequency.txt
+
+# $verse = $bible[0]
+
+# $verse = $bible | Select-Object -First 10 | Where-Object text -Match ',' | Select-Object -First 1
+
+# $verse.text
+
+# ----------------------------------------------------------------------
+# Verses which contain 'the' twice
+# ----------------------------------------------------------------------
+
+'the abc the' -match '.*the.*the.*'
+
+$result = $bible | Where-Object { $_.text -match '.*the.*the.*' }
+
+
+$index.the.Count
+
+$the_unique = $index.the | Sort-Object -Property id -Unique
+
+
+
+$ids_the = $index.the | Sort-Object id | % id
+
+$ids_the.Count
+
+$ids_the_unique = $ids_the | Get-Unique
+
+
+
+# ----------------------------------------------------------------------
+# $index : add only if word not in there
+# ----------------------------------------------------------------------
+$a = Get-Date
+
+$index = @{}
+
+$prev = ''
+
+foreach ($verse in $bible)
+{
+    $current = 'book: {0} chapter: {1}' -f $verse.Book, $verse.Chapter
+    if ($prev -ne $current)
+    {
+        $prev = $current
+        Write-Host $current -ForegroundColor Yellow
+    }
+
+    $words = $verse.text.ToLower() -replace '\.', '' -replace ',', '' -replace ':', '' -replace ';', '' -split ' '
+
+    foreach ($word in $words)
+    {
+        if ($index[$word] -eq $null)
+        {
+            $index[$word] = @($verse)
+        }
+        else
+        {
+            $index[$word] += $verse
+        }        
+    }
+}
+
+$b = Get-Date
+
+($b - $a).TotalMinutes
